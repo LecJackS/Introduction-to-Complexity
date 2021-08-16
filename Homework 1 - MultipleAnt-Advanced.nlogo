@@ -1,10 +1,10 @@
-;extensions [ vid ]
+extensions [ py ]
 
 patches-own [ food scent is-nest? ]
 
-turtles-own [ is-returning ] ;food-eaten
+turtles-own [ is-returning hormones ] ;food-eaten
 
-globals [ food-collected ]
+globals [ food-collected test ]
 
 to setup
   ;ca
@@ -12,13 +12,17 @@ to setup
   clear-all
   reset-ticks
   set food-collected 0
+  set test [1 2 3 4 5 6]
   create-turtles population
   ask turtles
   [
     set shape "bug"
+
+    set pen-size 0
     set size 1
-    set color blue
+    set color red
     ;set food-eaten 0
+    set hormones 0
     set is-returning false ; is returning or it's collecting
     ;set max-scent 0
   ]
@@ -27,13 +31,16 @@ to setup
 end
 
 to go
-  ;if not any? patches with [food > 0] [stop]
+  if not any? patches with [food > 0] [stop]
 
   ask turtles
   [
     ifelse is-returning
     [
       return-food
+      ;reduce hormones
+      set hormones (hormones-decay * hormones)
+      ;set label round (100 * hormones)
     ]
     [
       search-food
@@ -56,7 +63,11 @@ to go
       ;set food-eaten 0
       ;set label food-eaten
       set is-returning false
+      set hormones 0
+      ;set label round (100 * hormones)
     ]
+
+
   ]
 
   reduce-scent
@@ -69,11 +80,11 @@ to reduce-scent
   [
     ifelse scent > 0
     [
-      ;set scent max list 0 (scent - max-scent-per-patch / scent-duration)
-      ;set pcolor scale-color yellow scent 0 max-scent-per-patch
+      set scent max list 0 (scent - max-scent-per-patch / scent-duration)
+      set pcolor scale-color yellow scent 0 (2 * max-scent-per-patch)
     ]
     [
-      ;set pcolor scale-color green food 0 food-per-patch
+      set pcolor scale-color green food 0 (2 * food-per-patch)
     ]
 
     ifelse scent > 0
@@ -83,6 +94,7 @@ to reduce-scent
     [
       ;set pcolor scale-color green food 0 food-per-patch
     ]
+
     if view-mode = "number-scent"
     [
       set plabel round scent
@@ -91,8 +103,13 @@ to reduce-scent
     [
       set plabel round food
     ]
-
+    if view-mode = "color"
+    [
+      set plabel ""
+    ]
   ]
+
+
   ;ask patch 0 0
   ;[
   ;  set pcolor pink
@@ -104,41 +121,103 @@ to reduce-scent
 end
 
 to search-food
-  ifelse scent > 0
-  [
-    ; smell around spot
-    ;max (list ask patch pxcoord []))
-    let to-go-x 0
-    let to-go-y 0
-    let max-scent 0
-    pd repeat 0
+  ; smell around spot
+  ;max (list ask patch pxcoord []))
+  ;let to-go-x 0
+  ;let to-go-y 0
+  ;let max-scent 0
+  ;ask patches [distance]
+  ;let front-p patch-ahead 1
+  ;let left-p patch-left-and-ahead 45 1
+  ;let right-p patch-right-and-ahead 45 1
+
+  ;let front-patches (list front-p left-p right-p)
+  let max-food-patch max-one-of neighbors [food] ; All 8 neighbour patches around
+  ;let max-food-patch one-of front-patches
+  ;repeat 9
+  ;[
+    ;print "Looping"
+    ;print ([scent] of patch-ahead 1) ; for debugging
+  ;  if ([scent] of patch-ahead 1) >= max-scent
+   ; [
+   ;   set max-scent ([scent] of patch-ahead 1)
+   ;   set to-go-x ([pxcor] of patch-ahead 1)
+   ;   set to-go-y ([pycor] of patch-ahead 1)
+   ; ]
+   ; right 45
+  ;]
+
+    ; Walk towards max scent
+   ; face patch to-go-x to-go-y fd 1
+    ifelse [food] of max-food-patch > 0
     [
-      ;print "Looping"
-      ;print ([scent] of patch-ahead 1) ; for debugging
-      if ([scent] of patch-ahead 1) >= max-scent
+      face max-food-patch fd 1
+    ]
+    [
+      let front-p patch-ahead 1
+      let left-p patch-left-and-ahead 45 1
+      let right-p patch-right-and-ahead 45 1
+
+      ;let max-scent-patch max-one-of neighbors [scent]
+      let max-scent 0
+      let max-scent-patch patch-at 0 0
+      foreach (list front-p left-p right-p)
       [
-        set max-scent ([scent] of patch-ahead 1)
-        set to-go-x ([pxcor] of patch-ahead 1)
-        set to-go-y ([pycor] of patch-ahead 1)
+      x ->
+        if is-patch? x [
+          if [scent] of x > max-scent
+          [
+            set max-scent [scent] of x
+            set max-scent-patch x
+          ]
+        ]
       ]
-      right 45
+
+
+      ;let max-scent-patch max-one-of neighbors [scent]
+      ;let list-of-scents ([scent] of neighbors )
+      ;let list-of-scents ([scent] of neighbors ) ;softmax distribution for moving over scents
+      ;print list-of-scents
+      ;let acum-probs softmax-all list-of-scents
+
+      ifelse ([scent] of max-scent-patch > 0) and (random-float 1 < prob-follow-scent)
+      [
+        face max-scent-patch fd 1
+      ]
+      [
+        random-walk
+      ]
     ]
 
-    ifelse false ;coin-flip?
-    [
-      ; Walk towards max scent
-      facexy to-go-x to-go-y
-      forward 1
-    ]
-    [
-      random-walk
-    ]
-  ]
-  [
-    random-walk
-  ]
   ;print food
   ;report (food) > 0
+end
+
+to-report softmax-all [list-of-scents]
+  let sum-denominator 0
+  let numerators []
+  let softmaxes []
+  let acum-probs []
+  let acum-sum 0
+  foreach list-of-scents
+  [
+    ;set softmaxes lput
+    x -> set numerators lput exp(x) numerators
+  ]
+  ;set softmaxes (softmaxes / sum(softmaxes))
+  set sum-denominator sum(numerators)
+  foreach numerators [x -> set softmaxes lput (x / sum-denominator) softmaxes]
+
+  ; make probabilities an acummulated prob distribution (to sample easily later on)
+  foreach softmaxes
+  [
+    x -> set acum-sum (acum-sum + x)
+    set acum-probs lput acum-sum acum-probs
+  ]
+
+  ;set softmaxes map [ ? / sum-denominator ] softmaxes
+  ;print acum-probs
+  report acum-probs
 end
 
 to random-walk
@@ -161,6 +240,7 @@ to collect-food
   ]
 
   set food-collected (food-collected + 1)
+  set hormones max-scent-per-patch
   ;set label food-eaten
   ;set plabel food
   ;set plabel scent
@@ -171,11 +251,13 @@ to collect-food
 end
 
 to return-food
-  set scent max list (scent + 1) max-scent-per-patch
+  set scent (scent + hormones)
+  ;print scent
   ;set plabel scent
-  ;set pcolor scale-color yellow scent 0 max-scent-per-patch
 
-  facexy 0 0
+
+  ;facexy 0 0
+  face patch 0 0
   ifelse (distancexy 0 0) > max-step-size
   [
     forward max-step-size
@@ -199,44 +281,65 @@ end
 to grow-food
   ask patches
   [
-    set pcolor green
-    set food 1;food-per-patch
+    ;set pcolor green
+    if map-type = "all-food"
+    [
+        set food food-per-patch
+    ]
+    if map-type = "1-circle"
+    [
+      if distancexy 10 10 < 5
+      [
+        set food food-per-patch
+      ]
+    ]
+    if map-type = "3-circles"
+    [
+      if (distancexy 10 10 < 5) or (distancexy -10 -10 < 5) or (distancexy -10 10 < 5)
+      [
+        set food food-per-patch
+      ]
+    ]
+    if map-type = "lines"
+    [
+      if (pxcor > 5 and pxcor < 10) or (pxcor > 10 and pxcor < 15) or (pycor > pxcor + 10 and pycor < pxcor + 15)
+      [
+        set food food-per-patch
+      ]
+    ]
+    set pcolor scale-color green food 0 (2 * food-per-patch)
+    ;print 2 * food
+    ;print 2 * food-per-patch
     set scent 0
-    set is-nest? false
   ]
 end
 
 to grow-nest
-  clean-hole
+  ask patches
+  [
+    set is-nest? (distancexy 0 0) < 2
+    if distancexy 0 0 < 2
+    [
+      clean-patch
+    ]
+  ]
 end
 
-to clean-hole
-  ask patch 0 0 [clean-patch]
-  ask patch 0 1 [clean-patch]
-  ask patch 0 -1 [clean-patch]
-  ask patch 1 0 [clean-patch]
-  ask patch 1 1 [clean-patch]
-  ask patch 1 -1 [clean-patch]
-  ask patch -1 0 [clean-patch]
-  ask patch -1 1 [clean-patch]
-  ask patch -1 -1 [clean-patch]
-end
 
 to clean-patch
   set food 0
   set scent 0
-  set is-nest? true
   set pcolor brown
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-800
-10
-1553
-764
+690
+45
+1358
+714
 -1
 -1
-22.6
+20.0
 1
 10
 1
@@ -274,9 +377,9 @@ NIL
 1
 
 BUTTON
-375
+350
 60
-438
+413
 93
 NIL
 go
@@ -291,15 +394,15 @@ NIL
 1
 
 SLIDER
-266
-110
-651
-143
+265
+155
+625
+188
 population
 population
 1
 200
-9.0
+81.0
 1
 1
 NIL
@@ -307,9 +410,9 @@ HORIZONTAL
 
 PLOT
 265
-400
-691
-742
+320
+675
+670
 Total Food Eaten
 Time
 NIL
@@ -318,16 +421,16 @@ NIL
 0.0
 10.0
 true
-false
+true
 "" ""
 PENS
 "default" 1.0 0 -14439633 true "" "plot food-collected"
 
 SLIDER
 265
-755
+680
 465
-788
+713
 max-step-size
 max-step-size
 1
@@ -339,10 +442,10 @@ NIL
 HORIZONTAL
 
 SLIDER
-265
-802
 470
-835
+680
+675
+713
 max-turn-angle
 max-turn-angle
 0
@@ -355,13 +458,43 @@ HORIZONTAL
 
 SLIDER
 265
-165
-437
-198
+200
+440
+233
 food-per-patch
 food-per-patch
 0
 100
+7.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+265
+240
+440
+273
+scent-duration
+scent-duration
+0.01
+100
+13.01
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+265
+280
+440
+313
+max-scent-per-patch
+max-scent-per-patch
+0
+20
 5.0
 1
 1
@@ -369,45 +502,15 @@ NIL
 HORIZONTAL
 
 SLIDER
-265
-220
-437
-253
-scent-duration
-scent-duration
-0.01
-100
-30.01
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-265
-285
-467
-318
-max-scent-per-patch
-max-scent-per-patch
-0
-20
-20.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-260
-355
-437
-388
+445
+240
+625
+273
 prob-follow-scent
 prob-follow-scent
 0
 1
-0.2
+0.85
 0.05
 1
 NIL
@@ -415,13 +518,38 @@ HORIZONTAL
 
 CHOOSER
 475
-165
-622
-210
+105
+625
+150
 view-mode
 view-mode
 "color" "number-scent" "number-food"
 2
+
+SLIDER
+445
+200
+625
+233
+hormones-decay
+hormones-decay
+0
+1
+0.88
+0.01
+1
+NIL
+HORIZONTAL
+
+CHOOSER
+475
+55
+625
+100
+map-type
+map-type
+"all-food" "1-circle" "3-circles" "lines"
+0
 
 @#$#@#$#@
 ## WHAT IS IT?
